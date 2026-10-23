@@ -44,8 +44,36 @@ for k in "${KS[@]}"; do
     -o "$tmp/$strain.k$k.jf" "$tmp/in.k$k" &
   pids+=($!)
 done
-{ stream "$r1s"; stream "$r2s"; } | tee "${fifos[@]}" > /dev/null
-for p in "${pids[@]}"; do wait "$p"; done
+# Run the stream in the background and watch the counters. If a counter exits early the stream
+# would block forever on its FIFO, so stop it and fail.
+{ stream "$r1s"; stream "$r2s"; } | tee "${fifos[@]}" > /dev/null &
+spid=$!
+reaped=()
+check_counters() {
+  local i rc
+  for i in "${!pids[@]}"; do
+    [[ -n ${reaped[$i]:-} ]] && continue
+    if ! kill -0 "${pids[$i]}" 2> /dev/null; then
+      rc=0
+      wait "${pids[$i]}" || rc=$?
+      reaped[$i]=1
+      if (( rc != 0 )); then
+        echo "profile_stream: jellyfish for k=${KS[$i]} exited with status $rc" >&2
+        kill "$spid" 2> /dev/null || true
+        return 1
+      fi
+    fi
+  done
+}
+while kill -0 "$spid" 2> /dev/null; do
+  check_counters || exit 1
+  sleep 3
+done
+wait "$spid"
+for i in "${!pids[@]}"; do
+  [[ -n ${reaped[$i]:-} ]] && continue
+  wait "${pids[$i]}" || { echo "profile_stream: jellyfish for k=${KS[$i]} failed" >&2; exit 1; }
+done
 
 for k in "${KS[@]}"; do
   jf="$tmp/$strain.k$k.jf"
