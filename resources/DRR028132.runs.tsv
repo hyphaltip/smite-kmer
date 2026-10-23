@@ -1,0 +1,2 @@
+sample_alias	run_accession	fastq_ftp	fastq_bytes
+NB_DRR028132	DRR028132	ftp.sra.ebi.ac.uk/vol1/fastq/DRR028/DRR028132/DRR028132_1.fastq.gz;ftp.sra.ebi.ac.uk/vol1/fastq/DRR028/DRR028132/DRR028132_2.fastq.gz	15207220990;15613162461

@@ -1,0 +1,17 @@
+strain	group	paper_mping	note
+HEG4	burst		Chen2019: bursting accession; paper reports 231-503 mPing for the 4 bursters, no per-line value in Supp Data 1
+A119	burst		Chen2019: bursting accession (231-503 range); no per-line value in Supp Data 1
+A123	burst		Chen2019: bursting accession (231-503 range); no per-line value in Supp Data 1
+A157	landrace_unverified		user states landraces have high mPing; not verified by the paper
+NB	reference	52.0	Nipponbare; paper entry CX140 mPing=52
+NB_DRR028132	reference	52.0	Nipponbare wild-type, ENA DRR028132 (independent dataset); paper entry CX140 mPing=52
+B031	low_panel	12.0	Ngatsin; indica; Ping=0
+IRIS_313-11418	low_panel	6.0	MATALI; indica; Ping=0
+CX55	low_panel	10.0	Pengshantieganzhan ; indica; Ping=0
+IRIS_313-10761	low_panel	8.0	BALIK SEMAH; tropical japonica; Ping=2
+CX269	low_panel	1.0	IAC165; tropical japonica; Ping=0
+IRIS_313-10871	low_panel	6.0	ARC 11777; aus/boro; Ping=0
+IRIS_313-8321	low_panel	3.0	BHADOIA 303; aus/boro; Ping=0
+IRIS_313-8385	low_panel	0.0	JC149; aromatic; Ping=0
+IRIS_313-11652	low_panel	5.0	GONG SHE 9; temperate japonica; Ping=0
+IRIS_313-8171	low_panel	10.0	AUGUSTZA; temperate japonica; Ping=0
