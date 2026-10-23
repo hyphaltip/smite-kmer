@@ -47,6 +47,7 @@ def load(results, k):
 def fig_recovery(mp, grp, k, path):
     fig, ax = plt.subplots(figsize=(5.6, 5))
     pp = grp.loc[mp.index, "paper_mping"].dropna()
+    pp = pp[mp[pp.index].notna()]
     x, y = pp.values, mp[pp.index].values
     lim = 60
     ax.plot([0, lim], [0, lim], color="#999", lw=1, ls="--", label="y = x")
@@ -70,7 +71,7 @@ def fig_recovery(mp, grp, k, path):
 
 
 def fig_by_strain(mp, grp, path):
-    order = mp.sort_values().index
+    order = mp.dropna().sort_values().index
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
     ax.axhspan(231, 503, color="#c0392b", alpha=0.10, lw=0)
     ax.text(len(mp) - 3.6, 340, "Chen 2019 burst range\n(231-503)", color="#a93226",
@@ -87,7 +88,11 @@ def fig_by_strain(mp, grp, path):
     for g in ["burst", "reference", "low_panel"]:
         ax.bar(np.nan, np.nan, color=COL[g], label=LAB[g])
     ax.legend(frameon=False, loc="upper left", fontsize=9)
-    fig.tight_layout()
+    missing = list(mp[mp.isna()].index)
+    if missing:
+        fig.text(0.01, 0.005, "No baseline, not shown: " + ", ".join(missing), ha="left", va="bottom",
+                 fontsize=8, color="#555")
+    fig.tight_layout(rect=(0, 0.03 if missing else 0, 1, 1))
     fig.savefig(path, dpi=150)
     plt.close(fig)
     return order
@@ -97,7 +102,7 @@ def fig_profile(depths, base, order, fasta, path):
     win, _ = mk.window_profile(depths, base.to_dict(), 40)
     w = win[win.te == "mPing"]
     M = w.pivot(index="strain", columns="start", values="cn")
-    M = M.loc[[s for s in order[::-1] if s in M.index]]
+    M = M.loc[[s for s in order if s in M.index]]
     L = np.log2(M.div(M.median(axis=1), axis=0).replace(0, np.nan))
     seq = dict(mk.read_fasta(fasta))["mPing"]
     starts = list(M.columns)
@@ -125,7 +130,7 @@ def fig_all_tes(cn, strains, order, path):
     tes = list(cn.index)
     H = pd.DataFrame({s: [cn.loc[t, f"cn_{s}"] for t in tes] for s in strains}, index=tes)
     Hl = np.log10(H.replace(0, np.nan).clip(lower=0.1))
-    cols = [s for s in order[::-1] if s in Hl.columns]
+    cols = [s for s in order if s in Hl.columns]
     fig, ax = plt.subplots(figsize=(8.2, 5.4))
     im = ax.imshow(Hl[cols].values, aspect="auto", cmap="viridis", vmin=-1, vmax=2.7)
     ax.set_xticks(range(len(cols)))
@@ -135,6 +140,8 @@ def fig_all_tes(cn, strains, order, path):
     for i, t in enumerate(tes):
         for j, s in enumerate(cols):
             v = H.loc[t, s]
+            if np.isnan(v):
+                continue
             ax.text(j, i, f"{v:.0f}" if v >= 10 else f"{v:.1f}", ha="center", va="center", fontsize=6.5,
                     color="white" if Hl.loc[t, s] < 1.2 else "black")
     cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
@@ -186,17 +193,20 @@ def main():
 
     r, rho, xl, yl = fig_recovery(mp, grp, a.k, figs / "fig1_recovery.png")
     order = fig_by_strain(mp, grp, figs / "fig2_mping_by_strain.png")
-    gcw = fig_profile(depths, base, order, ROOT / "RiceTE.fa", figs / "fig3_mping_profile.png")
-    H = fig_all_tes(cn, strains, order, figs / "fig4_all_tes.png")
+    no_base = [s_ for s_ in mp.index if s_ not in order]
+    order_all = pd.Index(list(order[::-1]) + no_base)  # high to low, strains without a baseline last
+    gcw = fig_profile(depths, base, order_all, ROOT / "RiceTE.fa", figs / "fig3_mping_profile.png")
+    H = fig_all_tes(cn, strains, order_all, figs / "fig4_all_tes.png")
     montage([figs / f for f in ("fig1_recovery.png", "fig2_mping_by_strain.png",
                                 "fig3_mping_profile.png", "fig4_all_tes.png")], out / "report_preview.png")
 
     rows = []
-    for s in order[::-1]:
+    for s in list(order[::-1]) + no_base:
         paper = grp.loc[s, "paper_mping"]
-        rows.append({"strain": s, "group": grp.loc[s, "group"], "single_copy_depth": int(base[s]),
-                     "paper_mPing": "" if pd.isna(paper) else f"{paper:.0f}", f"kmer_mPing_k{a.k}": f"{mp[s]:.1f}",
-                     "ratio": "" if pd.isna(paper) or paper == 0 else f"{mp[s] / paper:.2f}"})
+        rows.append({"strain": s, "group": grp.loc[s, "group"], "single_copy_depth": "" if pd.isna(base[s]) else int(base[s]),
+                     "paper_mPing": "" if pd.isna(paper) else f"{paper:.0f}",
+                     f"kmer_mPing_k{a.k}": "n/a (no baseline)" if pd.isna(mp[s]) else f"{mp[s]:.1f}",
+                     "ratio": "" if pd.isna(paper) or paper == 0 or pd.isna(mp[s]) else f"{mp[s] / paper:.2f}"})
     tab = pd.DataFrame(rows)
     tab.to_csv(out / "mping_by_strain.tsv", sep="\t", index=False)
     ratios = np.array([float(x) for x in tab[tab.group == "low_panel"].ratio if x != ""])
@@ -218,7 +228,7 @@ def main():
 Copy numbers of rice transposable elements (TEs) estimated from k-mer depth in short reads, compared with
 published values. The algorithm is described in [`docs/ALGORITHM.md`](../ALGORITHM.md).
 
-**Scope.** k={a.k}; {len(strains)} strains; {len(cn)} TEs in `RiceTE.fa`; no GC correction applied.
+**Scope.** k={a.k}; {len(strains)} strains{(" (" + ", ".join(no_base) + " has no baseline and no copy numbers)") if no_base else ""}; {len(cn)} TEs in `RiceTE.fa`; no GC correction applied.
 
 ## Summary
 
@@ -270,13 +280,15 @@ There are no published copy numbers for these TEs in the data used here, so the 
 - Each strain is scaled by its own single-copy depth, taken as the highest peak above the error valley of its k-mer histogram.
   Low-depth strains (single-copy depth 5 to 9) sit close to that valley, so their scaling is less certain.
 - A k-mer must match exactly, so diverged copies are undercounted.
+- A strain whose k-mer histogram has no clear single-copy peak gets no copy numbers instead of a guess
+  (the peak must be at least 1.1 times the error valley, with the valley at count 200 or below).
 - See [`docs/ALGORITHM.md`](../ALGORITHM.md) for the full list.
 
 ## Not yet included
 
 - GC-corrected copy numbers.
 - k=31 results for the same strains.
-- Landraces A119, A123, A157 and a second Nipponbare dataset (DRR028132).
+- Landraces A119, A123, A157 and CX140 (the paper's Nipponbare entry, streamed from ENA).
 - 100 additional lines from the 3,000-genome set.
 """
     (out / "REPORT.md").write_text(md)

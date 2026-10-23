@@ -137,3 +137,36 @@ def test_gc_bias_table_from_index(tmp_path):
     subprocess.run(["jellyfish", "count", "-m", "15", "-s", "1M", "-C", "-o", str(idx), str(fq)], check=True)
     tab = mk.gc_bias_table(idx, 15, baseline=20, lo=0.3, hi=3.0)
     assert tab.loc[tab.gc <= 1, "mean_depth"].mean() > 1.3 * tab.loc[tab.gc >= 6, "mean_depth"].mean()
+
+
+def _hist(freq_fn, overflow=0, top=1000):
+    counts = np.arange(1, top + 2)
+    freqs = np.array([freq_fn(c) for c in counts[:-1]] + [overflow], dtype=float)
+    return counts, freqs
+
+
+def test_baseline_peak_ignores_overflow_bin():
+    # jellyfish histo -h 1000 puts every k-mer with a higher count in bin 1001
+    counts, freqs = _hist(lambda c: 1e6 * np.exp(-c / 1.5) + 2e5 * np.exp(-0.5 * ((c - 30) / 5.0) ** 2),
+                          overflow=5e6)
+    assert abs(mk.baseline_peak(counts, freqs) - 30) <= 1
+
+
+def test_baseline_peak_nan_when_no_peak():
+    # shallow strain: errors and single-copy peak merge into one falling curve with a shoulder
+    head = [40162480, 34617967, 37328309, 36711675, 33117262, 27784742, 21910363,
+            16417589, 11758585, 8162998, 5542059, 3704232, 2488393, 1693122]
+    counts = np.arange(1, 1002)
+    freqs = np.array(head + [head[-1] * 0.68 ** i for i in range(1, 987)] + [155638], dtype=float)
+    assert np.isnan(mk.baseline_peak(counts, freqs))
+
+
+def test_baseline_peak_nan_for_monotone_decline():
+    counts, freqs = _hist(lambda c: 1e7 * np.exp(-c / 20.0), overflow=1e3)
+    assert np.isnan(mk.baseline_peak(counts, freqs))
+
+
+def test_baseline_peak_deep_strain_still_found():
+    counts, freqs = _hist(lambda c: 1e6 * np.exp(-c / 1.5) + 8e5 * np.exp(-0.5 * ((c - 133) / 15.0) ** 2),
+                          overflow=1e5)
+    assert abs(mk.baseline_peak(counts, freqs) - 133) <= 2

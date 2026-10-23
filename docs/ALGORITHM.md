@@ -34,12 +34,16 @@ A k-mer from a TE appears in the reads once for every TE copy that carries it. A
 
 ### 4. Find the single-copy depth (`baseline_peak`)
 
-1. Smooth the histogram with a 3-bin moving average.
-2. Start at count 2. Move up while the smoothed value keeps falling. This finds the end of the error valley.
-3. The baseline is the count of the highest smoothed value at or above the valley.
-4. If the peak is within 1 of the valley, the code prints a warning.
+1. Ignore the last histogram bin. `jellyfish histo -h 1000` puts every k-mer with a higher count there.
+2. Smooth the histogram with a 3-bin moving average.
+3. Start at count 2. Move up while the smoothed value keeps falling. This finds the end of the error valley. The search stops at count 200.
+4. The baseline is the count of the highest smoothed value at or above the valley.
+5. The function returns NaN, and `analyze` leaves that strain's copy numbers empty, when either of these holds:
+   - There is no valley at counts of 200 or below.
+   - The peak is less than 1.1 times the valley height. This happens with shallow data, where errors and the single-copy peak merge into one falling curve.
+6. If the peak is next to the valley, the code prints a warning and still returns it.
 
-The rule takes the highest peak above the valley. It assumes that peak is the single-copy peak. It does not check this against a genome size or a heterozygous peak.
+The rule takes the highest peak above the valley. It assumes that peak is the single-copy peak. It does not check this against a genome size or a heterozygous peak. The valley sits at about 3 for strains with a single-copy depth near 5 to 10 and at 27 to 35 for strains near 100, so no tighter cap is safe. The 1.1 threshold is a heuristic. Of 26 histograms checked, it rejected three: CX55 at k=21 and k=31, and IRIS_313-10761 at k=31.
 
 ### 5. Estimate copy number (`analyze`)
 
@@ -104,7 +108,7 @@ Sequencing depth can depend on the GC content of a k-mer. This step estimates th
 
 - **Diverged copies.** A k-mer must match exactly. Copies with mutations lose k-mers. The method then underestimates copy number for old or diverged copies.
 - **Shared k-mers.** `multiplicity` is counted only inside `RiceTE.fa`. A TE k-mer can also occur in other genome sequence, such as a related TE family not in the file. This inflates depth. It has not been measured here.
-- **Baseline.** The baseline is the highest peak above the error valley. It is wrong if that peak is not the single-copy peak. The HEG4 baseline is 133 and NB is 57. HEG4 reads come from a folder named `HEG4_2-5kb`, which suggests a mate-pair library. This has not been checked, so the HEG4 baseline has not been confirmed.
-- **Low depth.** For strains with a single-copy depth near 5 to 9, the error valley and the single-copy peak are close together. The baseline can be off by one or two counts, which is a large relative error.
+- **Baseline.** The baseline is the highest peak above the error valley. It is wrong if that peak is not the single-copy peak. Strains with no clear peak get no baseline (see step 4). The HEG4 baseline is 133 and NB is 57. HEG4 reads come from a folder named `HEG4_2-5kb`, which suggests a mate-pair library. This has not been checked, so the HEG4 baseline has not been confirmed.
+- **Low depth.** For strains with a single-copy depth near 5 to 9, the error valley and the single-copy peak are close together. The baseline can be off by one or two counts, which is a large relative error. Lower depth per k-mer at k=31 makes this worse: it gave no baseline for two of the 10 low-mPing strains, against one at k=21.
 - **Reference choice.** NB carries about 52 mPing copies. Fold change against NB understates how low other strains are. Absolute copy number, or a comparison to a set of low-copy strains, is more informative. A screen based on a low-copy set is planned and is not built.
 - **GC dip in mPing.** Several strains show lower depth at mPing positions about 200 to 240, which have the highest GC (0.68). The cause is not yet known. The GC correction exists to test this.

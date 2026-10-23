@@ -84,17 +84,36 @@ def read_histo(path):
     return arr[:, 0], arr[:, 1]
 
 
-def baseline_peak(counts, freqs):
-    """Modal peak above the error valley of a k-mer histogram."""
-    h = np.zeros(int(counts.max()) + 2)
-    h[counts] = freqs
-    s = np.convolve(h, np.ones(3) / 3, mode="same")
+def baseline_peak(counts, freqs, max_valley=200, min_rise=1.1):
+    """Single-copy depth: modal peak above the error valley of a k-mer histogram.
+
+    The last bin of `jellyfish histo -h N` holds every k-mer with a higher count, so it is
+    ignored. The error valley is searched only at counts <= max_valley. Returns NaN when there
+    is no valley in that range, or when the peak above it is less than min_rise times the valley
+    height (shallow data, where errors and the single-copy peak merge).
+    """
+    counts = np.asarray(counts)
+    freqs = np.asarray(freqs, dtype=float)
+    keep = counts < counts.max()
+    top = int(counts[keep].max())
+    h = np.zeros(top + 2)
+    h[counts[keep]] = freqs[keep]
+    sm = np.convolve(h, np.ones(3) / 3, mode="same")[:top + 1]
+    limit = min(max_valley, top - 1)
     valley = 2
-    while valley + 1 < len(s) and s[valley] > s[valley + 1]:
+    while valley < limit and sm[valley] > sm[valley + 1]:
         valley += 1
-    peak = valley + int(np.argmax(s[valley:]))
+    if valley >= limit:
+        print(f"WARNING: no error valley at counts <= {max_valley}; baseline not estimated",
+              file=sys.stderr)
+        return float("nan")
+    peak = valley + int(np.argmax(sm[valley:]))
+    if sm[peak] < min_rise * sm[valley]:
+        print(f"WARNING: no clear single-copy peak (valley={valley}, peak={peak}); baseline not estimated",
+              file=sys.stderr)
+        return float("nan")
     if peak <= valley + 1:
-        print(f"WARNING: no clear single-copy peak (valley={valley}, peak={peak})",
+        print(f"WARNING: single-copy peak is next to the error valley (valley={valley}, peak={peak})",
               file=sys.stderr)
     return peak
 
@@ -124,6 +143,8 @@ def gc_bias_table(index, k, baseline, lo=0.5, hi=1.5, jellyfish="jellyfish"):
     single-copy depth (mostly single-copy genome, so depth differences between GC
     bins are sequencing bias). bias = bin mean depth / mean depth over all bins.
     Streams jellyfish dump through awk because the index can hold ~4e8 k-mers."""
+    if not np.isfinite(baseline):
+        raise ValueError("no baseline for this index; cannot select single-copy-like k-mers")
     lo_c, hi_c = max(1, int(np.floor(lo * baseline))), int(np.ceil(hi * baseline))
     awk = ('{g=gsub(/[GC]/,"",$1); n[g]++; s[g]+=$2} '
            'END{for(g in n) print g"\t"n[g]"\t"s[g]}')
@@ -225,11 +246,15 @@ def analyze(args):
     for s in strains:
         c, f = read_histo(work / f"{s}.k{args.k}.histo")
         base[s] = baseline_peak(c, f)
+        if np.isnan(base[s]):
+            print(f"WARNING: {s}: no baseline, copy numbers left empty", file=sys.stderr)
         depth = pd.read_csv(work / f"{s}.k{args.k}.depth.tsv", sep="\t",
                             index_col="kmer")["depth"]
         kt[f"depth_{s}"] = kt["kmer"].map(depth)
         uniq[f"depth_{s}"] = uniq["kmer"].map(depth)
         uniq[f"cn_{s}"] = uniq[f"depth_{s}"] / base[s]
+    if np.isnan(base[args.reference]):
+        sys.exit(f"reference {args.reference} has no baseline; choose another reference")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     pd.Series(base, name="single_copy_depth").to_csv(out / f"baseline.k{args.k}.tsv", sep="\t")
@@ -247,6 +272,11 @@ def analyze(args):
             if s == args.reference:
                 continue
             x = g[f"cn_{s}"].to_numpy()
+            if np.isnan(base[s]):
+                for key in ("fc", "wilcoxon_p", "fc_lo", "fc_hi"):
+                    row[f"{key}_{s}"] = np.nan
+                row[f"spike_{s}"] = False
+                continue
             mref = np.median(ref) if len(ref) else np.nan
             fc = np.median(x) / mref if mref > 0 else np.nan
             row[f"fc_{s}"] = fc

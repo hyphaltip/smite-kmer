@@ -1,7 +1,6 @@
 strain	group	single_copy_depth	paper_mPing	kmer_mPing_k21	ratio
 HEG4	burst	133		484.6	
 NB	reference	57	52	52.4	1.01
-CX55	low_panel	5	10	14.2	1.42
 B031	low_panel	8	12	12.4	1.03
 IRIS_313-10761	low_panel	6	8	11.3	1.42
 IRIS_313-8171	low_panel	7	10	10.7	1.07
@@ -11,3 +10,4 @@ IRIS_313-11652	low_panel	17	5	5.4	1.07
 IRIS_313-8321	low_panel	9	3	4.4	1.48
 CX269	low_panel	12	1	1.2	1.17
 IRIS_313-8385	low_panel	5	0	0.0	
+CX55	low_panel		10	n/a (no baseline)	
