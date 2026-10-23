@@ -1,0 +1,20 @@
+# read data and derived indexes
+reads/
+reads_sub/
+work/
+results/
+logs/
+*.jf
+samples.smoke.tsv
+
+# files from other agents / earlier attempts, not part of this project
+lib/
+run_analysis.sh
+strain_config.tsv
+kmer_indexes/
+
+__pycache__/
+.pytest_cache/
+scripts/compare_kmers.py
+scripts/index_reads.sh
+scripts/index_te_kmers.sh

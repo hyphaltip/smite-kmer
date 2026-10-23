@@ -1,0 +1,3 @@
+strain	r1	r2
+HEG4	reads/HEG4/flowcell67_lane3_pair1.fastq.gz	reads/HEG4/flowcell67_lane3_pair2.fastq.gz
+NB	reads/NB/flowcell133_lane8_pair1_GAGTGG.fastq.gz	reads/NB/flowcell133_lane8_pair2_GAGTGG.fastq.gz
