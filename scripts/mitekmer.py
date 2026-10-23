@@ -6,6 +6,8 @@ Subcommands:
   query     depth of those k-mers in one jellyfish index
   baseline  single-copy depth (modal peak) from a jellyfish histogram
   analyze   normalise, compare to a reference strain, flag, plot
+  gcbias    depth-vs-GC curve of one index, from single-copy-like k-mers
+  profile   windowed copy number along each TE from an analyze output, with a breadth summary
 """
 import argparse
 import csv
@@ -113,6 +115,103 @@ def block_bootstrap_fc(a, b, block, n_boot=2000, seed=1):
     return np.nanpercentile(fcs, [2.5, 97.5])
 
 
+def gc_count(kmer):
+    return kmer.count("G") + kmer.count("C")
+
+
+def gc_bias_table(index, k, baseline, lo=0.5, hi=1.5, jellyfish="jellyfish"):
+    """Relative depth by G+C count, from k-mers whose count is within [lo, hi] x the
+    single-copy depth (mostly single-copy genome, so depth differences between GC
+    bins are sequencing bias). bias = bin mean depth / mean depth over all bins.
+    Streams jellyfish dump through awk because the index can hold ~4e8 k-mers."""
+    lo_c, hi_c = max(1, int(np.floor(lo * baseline))), int(np.ceil(hi * baseline))
+    awk = ('{g=gsub(/[GC]/,"",$1); n[g]++; s[g]+=$2} '
+           'END{for(g in n) print g"\t"n[g]"\t"s[g]}')
+    dump = subprocess.Popen([jellyfish, "dump", "-c", "-L", str(lo_c), "-U", str(hi_c), str(index)],
+                            stdout=subprocess.PIPE, text=True)
+    agg = subprocess.run(["awk", awk], stdin=dump.stdout, capture_output=True, text=True, check=True)
+    dump.stdout.close()
+    if dump.wait() != 0:
+        raise RuntimeError("jellyfish dump failed")
+    rows = [(int(g), int(n), float(t)) for g, n, t in
+            (line.split("\t") for line in agg.stdout.splitlines())]
+    df = pd.DataFrame(sorted(rows), columns=["gc", "n_kmers", "sum_depth"])
+    df["mean_depth"] = df["sum_depth"] / df["n_kmers"]
+    overall = df["sum_depth"].sum() / df["n_kmers"].sum()
+    df["bias"] = df["mean_depth"] / overall
+    return df[["gc", "n_kmers", "mean_depth", "bias"]]
+
+
+def correct_gc(depths, bias_by_strain, min_kmers=1000):
+    """Divide each TE k-mer depth by its strain's bias for that k-mer's G+C count.
+    GC bins with fewer than min_kmers genome k-mers get bias 1 (no correction)."""
+    out = depths.copy()
+    gc = out["kmer"].map(gc_count)
+    for strain, tab in bias_by_strain.items():
+        col = f"depth_{strain}"
+        if col not in out:
+            continue
+        ok = tab[tab["n_kmers"] >= min_kmers].set_index("gc")["bias"]
+        out[col] = out[col] / gc.map(ok).fillna(1.0)
+    return out
+
+
+def window_profile(depths, base, window, min_frac=0.5):
+    """Windowed copy number along each TE from a te_kmer_depths table.
+
+    Only k-mers unique within the TE file are used. Windows are runs of `window`
+    consecutive unique k-mers; the last short run is kept if it has >= window/2 k-mers.
+    Returns (windows, summary). `breadth` is the fraction of windows whose copy
+    number is >= min_frac * the strain's median window copy number, so partial-length
+    copies pull it below 1. `min_window_ratio` is the lowest window / median.
+    """
+    uniq = depths[depths["multiplicity"] == 1]
+    win_rows, sum_rows = [], []
+    for te, g in uniq.groupby("te", sort=False):
+        g = g.sort_values("pos").reset_index(drop=True)
+        edges = list(range(0, len(g), window))
+        if len(edges) > 1 and len(g) - edges[-1] < window / 2:
+            edges.pop()
+        bounds = list(zip(edges, edges[1:] + [len(g)]))
+        for s, b in base.items():
+            col = f"depth_{s}"
+            if col not in g:
+                continue
+            cn = np.array([np.median(g[col].iloc[lo:hi]) / b for lo, hi in bounds])
+            for (lo, hi), c in zip(bounds, cn):
+                win_rows.append((te, s, int(g["pos"].iloc[lo]), int(g["pos"].iloc[hi - 1]), hi - lo, c))
+            med = float(np.median(cn))
+            if med > 0:
+                breadth = float(np.mean(cn >= min_frac * med))
+                low = float(cn.min() / med)
+            else:
+                breadth = low = np.nan
+            sum_rows.append((te, s, len(g), len(bounds), med, breadth, low))
+    windows = pd.DataFrame(win_rows, columns=["te", "strain", "start", "end", "n_kmers", "cn"])
+    summary = pd.DataFrame(sum_rows, columns=["te", "strain", "n_kmers_unique", "n_windows",
+                                              "median_cn", "breadth", "min_window_ratio"])
+    return windows, summary
+
+
+def profile(args):
+    res = Path(args.results)
+    depths = pd.read_csv(res / f"te_kmer_depths.k{args.k}.tsv", sep="\t")
+    base = pd.read_csv(res / f"baseline.k{args.k}.tsv", sep="\t", index_col=0)["single_copy_depth"]
+    if args.gc_bias_dir:
+        tabs = {s_: pd.read_csv(Path(args.gc_bias_dir) / f"{s_}.k{args.k}.gcbias.tsv", sep="\t")
+                for s_ in base.index
+                if (Path(args.gc_bias_dir) / f"{s_}.k{args.k}.gcbias.tsv").exists()}
+        depths = correct_gc(depths, tabs)
+        print(f"GC-corrected {len(tabs)} of {len(base)} strains", file=sys.stderr)
+    windows, summary = window_profile(depths, base.to_dict(), args.window, args.min_frac)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    windows.to_csv(out / f"te_windows.k{args.k}.tsv", sep="\t", index=False)
+    summary.to_csv(out / f"te_breadth.k{args.k}.tsv", sep="\t", index=False)
+    if args.te:
+        print(summary[summary.te == args.te].round(3).to_string(index=False))
+
+
 def analyze(args):
     from scipy.stats import wilcoxon
     samples = pd.read_csv(args.samples, sep="\t")
@@ -212,6 +311,12 @@ def main():
     a = sp.add_parser("baseline")
     a.add_argument("--histo", required=True)
 
+    a = sp.add_parser("gcbias")
+    a.add_argument("--index", required=True)
+    a.add_argument("--k", type=int, required=True)
+    a.add_argument("--histo", required=True, help="histogram used to get the single-copy depth")
+    a.add_argument("--out", required=True)
+
     a = sp.add_parser("analyze")
     a.add_argument("--fasta", required=True)
     a.add_argument("--samples", required=True)
@@ -219,6 +324,15 @@ def main():
     a.add_argument("--k", type=int, required=True)
     a.add_argument("--reference", default="NB")
     a.add_argument("--threshold", type=float, default=2.0)
+    a.add_argument("--out", required=True)
+
+    a = sp.add_parser("profile")
+    a.add_argument("--results", required=True, help="analyze output directory")
+    a.add_argument("--k", type=int, required=True)
+    a.add_argument("--window", type=int, default=40, help="unique k-mers per window")
+    a.add_argument("--min-frac", type=float, default=0.5)
+    a.add_argument("--te", help="print the summary for this TE")
+    a.add_argument("--gc-bias-dir", help="directory of <strain>.k<k>.gcbias.tsv; corrects depths if given")
     a.add_argument("--out", required=True)
 
     args = p.parse_args()
@@ -231,6 +345,11 @@ def main():
             args.out, sep="\t", index=False)
     elif args.cmd == "baseline":
         print(baseline_peak(*read_histo(args.histo)))
+    elif args.cmd == "gcbias":
+        b = baseline_peak(*read_histo(args.histo))
+        gc_bias_table(args.index, args.k, b).to_csv(args.out, sep="\t", index=False)
+    elif args.cmd == "profile":
+        profile(args)
     else:
         analyze(args)
 

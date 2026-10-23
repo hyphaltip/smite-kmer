@@ -85,3 +85,55 @@ def test_synthetic_copy_number_recovered(tmp_path):
     assert res.loc["TE_B", "fc_AMP"] == pytest.approx(10.0, rel=0.25)
     assert not res.loc["TE_A", "spike_AMP"]
     assert res.loc["TE_B", "spike_AMP"]
+
+
+def test_window_profile_flags_partial_copies():
+    n = 200
+    depths = pd.DataFrame({"te": "x", "pos": np.arange(n), "multiplicity": 1,
+                           "depth_full": 100.0, "depth_partial": 100.0})
+    depths.loc[80:119, "depth_partial"] = 10.0  # 40 k-mers missing from most copies
+    # a k-mer shared with another TE must be ignored
+    depths.loc[0, "multiplicity"] = 2
+    depths.loc[0, "depth_full"] = 9999.0
+    win, summ = mk.window_profile(depths, {"full": 10, "partial": 10}, window=40)
+    s = summ.set_index("strain")
+    assert s.loc["full", "median_cn"] == 10 and s.loc["full", "breadth"] == 1
+    assert s.loc["partial", "breadth"] < 1
+    assert s.loc["partial", "min_window_ratio"] == pytest.approx(0.1)
+    assert win[(win.strain == "full")].cn.max() == 10  # multiplicity>1 k-mer dropped
+
+
+def test_window_profile_zero_depth_is_nan_not_error():
+    depths = pd.DataFrame({"te": "x", "pos": np.arange(50), "multiplicity": 1, "depth_s": 0.0})
+    _, summ = mk.window_profile(depths, {"s": 10}, window=25)
+    assert np.isnan(summ.breadth.iloc[0])
+
+
+def test_gc_count():
+    assert mk.gc_count("AAGCTTGC") == 4
+
+
+def test_correct_gc_divides_by_bin_bias_and_skips_sparse_bins():
+    depths = pd.DataFrame({"kmer": ["AAAAA", "GGGGG", "ACGTA"],
+                           "depth_s": [8.0, 12.0, 10.0]})
+    tab = pd.DataFrame({"gc": [0, 2, 5], "n_kmers": [5000, 10, 5000], "bias": [0.8, 5.0, 1.2]})
+    out = mk.correct_gc(depths, {"s": tab})
+    assert out.depth_s.tolist() == pytest.approx([10.0, 10.0, 10.0])  # 8/.8, 12/1.2, gc=2 sparse -> /1
+
+
+@pytest.mark.skipif(shutil.which("jellyfish") is None, reason="needs jellyfish")
+def test_gc_bias_table_from_index(tmp_path):
+    rng = np.random.default_rng(3)
+    # low-GC reads at depth ~2x the GC-rich ones
+    lo = rand_seq(rng, 4000).replace("G", "A").replace("C", "T")
+    hi = rand_seq(rng, 4000)
+    fq = tmp_path / "r.fa"
+    with open(fq, "w") as fh:
+        for name, g, cov in (("lo", lo, 40), ("hi", hi, 20)):
+            for i in range(cov * len(g) // 60):
+                st = int(rng.integers(0, len(g) - 60))
+                fh.write(f">{name}{i}\n{g[st:st + 60]}\n")
+    idx = tmp_path / "x.jf"
+    subprocess.run(["jellyfish", "count", "-m", "15", "-s", "1M", "-C", "-o", str(idx), str(fq)], check=True)
+    tab = mk.gc_bias_table(idx, 15, baseline=20, lo=0.3, hi=3.0)
+    assert tab.loc[tab.gc <= 1, "mean_depth"].mean() > 1.3 * tab.loc[tab.gc >= 6, "mean_depth"].mean()

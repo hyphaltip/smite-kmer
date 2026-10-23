@@ -1,3 +1,13 @@
-strain	r1	r2
-HEG4	reads/HEG4/flowcell67_lane3_pair1.fastq.gz	reads/HEG4/flowcell67_lane3_pair2.fastq.gz
-NB	reads/NB/flowcell133_lane8_pair1_GAGTGG.fastq.gz	reads/NB/flowcell133_lane8_pair2_GAGTGG.fastq.gz
+strain	reads
+HEG4	reads/HEG4
+NB	reads/NB
+B031	reads/lowmping/B031
+IRIS_313-11418	reads/lowmping/IRIS_313-11418
+CX55	reads/lowmping/CX55
+IRIS_313-10761	reads/lowmping/IRIS_313-10761
+CX269	reads/lowmping/CX269
+IRIS_313-10871	reads/lowmping/IRIS_313-10871
+IRIS_313-8321	reads/lowmping/IRIS_313-8321
+IRIS_313-8385	reads/lowmping/IRIS_313-8385
+IRIS_313-11652	reads/lowmping/IRIS_313-11652
+IRIS_313-8171	reads/lowmping/IRIS_313-8171

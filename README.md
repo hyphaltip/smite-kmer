@@ -21,9 +21,15 @@ elements in `RiceTE.fa` are amplified in one rice strain relative to another.
     mamba create -n mitekmer -c conda-forge python=3.12 numpy scipy pandas matplotlib pytest
     # jellyfish >= 2.3 on PATH (bioconda on Linux; `brew install jellyfish` on Apple silicon)
 
-    # samples.tsv: strain <TAB> r1 <TAB> r2
+    # samples.tsv: strain <TAB> reads_dir   (all read pairs in the folder are combined)
+    # or:           strain <TAB> r1 <TAB> r2 (a single pair)
     scripts/run_all.sh 21 8 2G NB      # K THREADS HASH_SIZE REFERENCE
+    # on SLURM: one count job per strain, then an analysis job (afterok dependency)
+    scripts/submit.sh 21 NB            # K REFERENCE; env: PARTITION ACCOUNT THREADS MEM TIME HASH_SIZE
     python -m pytest tests
+
+In a reads folder, R1 files match `*pair1*`, `*_R1*` or `*_1.f*`. The mate is found by swapping
+to `pair2`, `_R2` or `_2.`. A missing mate stops the run. All pairs go into one index per strain.
 
 Outputs land in `results/`: per-TE copy-number table, per-k-mer depths, baselines, and
 per-TE depth track plots.
@@ -34,5 +40,5 @@ per-TE depth track plots.
 - `scripts/subsample.sh` makes a small read subset for plumbing checks (too shallow for a real baseline).
 - Sanity check on real data: mPing should be well above 2x in HEG4 vs NB.
 
-See `PLAN.md` for the original problem statement. Planned: revisit dividing depth by in-file
+See `docs/ALGORITHM.md` for the full algorithm and its known limits. See `PLAN.md` for the original problem statement. Planned: revisit dividing depth by in-file
 multiplicity instead of dropping non-unique k-mers.
