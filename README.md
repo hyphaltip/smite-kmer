@@ -26,6 +26,9 @@ elements in `RiceTE.fa` are amplified in one rice strain relative to another.
     scripts/run_all.sh 21 8 2G NB      # K THREADS HASH_SIZE REFERENCE
     # on SLURM: one count job per strain, then an analysis job (afterok dependency)
     scripts/submit.sh 21 NB            # K REFERENCE; env: PARTITION ACCOUNT THREADS MEM TIME HASH_SIZE
+    # reads from NCBI SRA (preferred; ENA is used only for run metadata)
+    python3 scripts/make_sra_runs.py --strains resources/Chen2019/stream100.tsv --out runs.tsv
+    scripts/sra_pipeline.sh resources/Chen2019/stream100.tsv runs.tsv 21,31   # login node: prefetch; SLURM: convert, verify, count
     python -m pytest tests
 
 In a reads folder, R1 files match `*pair1*`, `*_R1*` or `*_1.f*`. The mate is found by swapping
