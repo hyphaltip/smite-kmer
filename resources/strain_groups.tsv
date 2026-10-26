@@ -15,3 +15,4 @@ IRIS_313-8385	low_panel	0.0	JC149; aromatic; Ping=0
 IRIS_313-11652	low_panel	5.0	GONG SHE 9; temperate japonica; Ping=0
 IRIS_313-8171	low_panel	10.0	AUGUSTZA; temperate japonica; Ping=0
 CX140	reference	52.0	Nipponbare in the 3K set (Chen 2019 entry CX140, mPing=52 from these same reads); streamed from ENA PRJEB6180
+NB_DRR028132	reference	52.0	Nipponbare wild-type, ENA DRR028132 (PRJDB3395). Only the first 2.27 GB of R1 (about 7.6x, single-end): the rest of the download was incomplete.

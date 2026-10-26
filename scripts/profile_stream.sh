@@ -4,8 +4,9 @@
 # which is deleted after the tables are made.
 # usage: profile_stream.sh STRAIN OUTDIR KS R1_LIST R2_LIST [THREADS] [HASH_SIZE] [MIN_QUAL]
 #   KS       comma-separated k values, e.g. 21,31
+#   R2_LIST  may be "-" for single-end input
 #   R*_LIST  comma-separated URLs (http/https/ftp, or ENA paths like ftp.sra.ebi.ac.uk/...)
-#            or local files (.gz or plain)
+#            or local files (.gz or plain), or partial:BYTES:PATH for the valid prefix of a truncated .gz
 # Outputs in OUTDIR: STRAIN.k<k>.histo  .depth.tsv  .stats, and gcbias/STRAIN.k<k>.gcbias.tsv
 # These names match count.sh, so `mitekmer.py analyze --workdir OUTDIR` reads them.
 # KEEP_INDEX=1 moves each jellyfish index to OUTDIR/STRAIN.k<k>.jf instead of deleting it.
@@ -26,7 +27,12 @@ stream() {
   local u list
   IFS=, read -ra list <<< "$1"
   for u in "${list[@]}"; do
+    echo "profile_stream: $(date +%H:%M:%S) streaming $u" >&2
     case $u in
+      partial:*)  # partial:BYTES:PATH, the first BYTES of a truncated .gz; only complete records are kept
+        spec=${u#partial:}
+        { head -c "${spec%%:*}" "${spec#*:}" | gzip -dc 2> /dev/null || true; } |
+          awk '{a[NR%4]=$0} NR%4==0{print a[1]; print a[2]; print a[3]; print a[0]}' ;;
       http://*|https://*|ftp://*) curl -sS --fail -L "$u" | gzip -dc ;;
       ftp.*)                      curl -sS --fail -L "https://$u" | gzip -dc ;;
       *.gz)                       gzip -dc "$u" ;;
@@ -46,7 +52,7 @@ for k in "${KS[@]}"; do
 done
 # Run the stream in the background and watch the counters. If a counter exits early the stream
 # would block forever on its FIFO, so stop it and fail.
-{ stream "$r1s"; stream "$r2s"; } | tee "${fifos[@]}" > /dev/null &
+{ stream "$r1s"; [[ $r2s == "-" ]] || stream "$r2s"; } | tee "${fifos[@]}" > /dev/null &
 spid=$!
 reaped=()
 check_counters() {
@@ -69,7 +75,22 @@ while kill -0 "$spid" 2> /dev/null; do
   check_counters || exit 1
   sleep 3
 done
-wait "$spid"
+rc=0
+wait "$spid" || rc=$?
+if (( rc != 0 )); then
+  echo "profile_stream: $(date +%H:%M:%S) read stream ended with status $rc" >&2
+  for i in "${!pids[@]}"; do
+    if kill -0 "${pids[$i]}" 2> /dev/null; then
+      st=running
+    else
+      jrc=0
+      wait "${pids[$i]}" || jrc=$?
+      st="exited with status $jrc"
+    fi
+    echo "profile_stream:   jellyfish k=${KS[$i]} $st" >&2
+  done
+  exit 1
+fi
 for i in "${!pids[@]}"; do
   [[ -n ${reaped[$i]:-} ]] && continue
   wait "${pids[$i]}" || { echo "profile_stream: jellyfish for k=${KS[$i]} failed" >&2; exit 1; }

@@ -170,3 +170,27 @@ def test_baseline_peak_deep_strain_still_found():
     counts, freqs = _hist(lambda c: 1e6 * np.exp(-c / 1.5) + 8e5 * np.exp(-0.5 * ((c - 133) / 15.0) ** 2),
                           overflow=1e5)
     assert abs(mk.baseline_peak(counts, freqs) - 133) <= 2
+
+
+def test_correct_gc_empty_curve_applies_no_correction():
+    depths = pd.DataFrame({"kmer": ["AAAAA", "GGGGG"], "depth_s": [8.0, 12.0]})
+    empty = pd.DataFrame(columns=["gc", "n_kmers", "mean_depth", "bias"])
+    out = mk.correct_gc(depths, {"s": empty})
+    assert out.depth_s.tolist() == [8.0, 12.0]
+
+
+def test_gcbias_cli_writes_empty_table_without_baseline(tmp_path):
+    # monotone decline with no valley or peak: baseline is NaN
+    counts = np.arange(1, 1002)
+    freqs = np.array([1e7 * np.exp(-c / 20.0) for c in counts[:-1]] + [1e3], dtype=float)
+    histo = tmp_path / "s.histo"
+    histo.write_text("".join(f"{c} {int(f)}\n" for c, f in zip(counts, freqs)))
+    out = tmp_path / "s.gcbias.tsv"
+    res = subprocess.run([sys.executable, str(ROOT / "scripts" / "mitekmer.py"), "gcbias",
+                          "--index", str(tmp_path / "missing.jf"), "--k", "21",
+                          "--histo", str(histo), "--out", str(out)],
+                         capture_output=True, text=True)
+    assert res.returncode == 0, res.stderr
+    assert "no baseline" in res.stderr
+    tab = pd.read_csv(out, sep="\t")
+    assert list(tab.columns) == ["gc", "n_kmers", "mean_depth", "bias"] and len(tab) == 0

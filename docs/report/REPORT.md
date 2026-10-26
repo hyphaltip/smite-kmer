@@ -2,12 +2,12 @@
 
 [![Report preview](report_preview.png)](REPORT.pdf)
 
-*Click the image for the [PDF](REPORT.pdf). Generated 2026-10-23 from code at commit b584e93 (uncommitted changes present).*
+*Click the image for the [PDF](REPORT.pdf). Generated 2026-10-26 from code at commit 4811a1e (uncommitted changes present).*
 
 Copy numbers of rice transposable elements (TEs) estimated from k-mer depth in short reads, compared with
 published values. The algorithm is described in [`docs/ALGORITHM.md`](../ALGORITHM.md).
 
-**Scope.** k=21; 12 strains (CX55 has no baseline and no copy numbers); 14 TEs in `RiceTE.fa`; no GC correction applied.
+**Scope.** k=21; 17 strains (CX55 has no baseline and no copy numbers); 14 TEs in `RiceTE.fa`; no GC correction applied. NB_DRR028132 uses only the first 2.27 GB of R1 (single-end, about 7.6x), because its download was incomplete.
 
 ## Summary
 
@@ -34,6 +34,11 @@ The HEG4 value has no independent check.
 | strain | group | single_copy_depth | paper_mPing | kmer_mPing_k21 | ratio |
 |---|---|---|---|---|---|
 | HEG4 | burst | 133 |  | 484.6 |  |
+| A119 | burst | 118 |  | 360.2 |  |
+| A123 | burst | 106 |  | 276.0 |  |
+| A157 | landrace_unverified | 17 |  | 142.7 |  |
+| NB_DRR028132 | reference | 5 | 52 | 60.0 | 1.15 |
+| CX140 | reference | 9 | 52 | 56.6 | 1.09 |
 | NB | reference | 57 | 52 | 52.4 | 1.01 |
 | B031 | low_panel | 8 | 12 | 12.4 | 1.03 |
 | IRIS_313-10761 | low_panel | 6 | 8 | 11.3 | 1.42 |
@@ -61,9 +66,9 @@ been applied to these results. A strain with no mPing k-mers has an empty row.
 
 ![Copy number of every TE in every strain](figures/fig4_all_tes.png){width=90%}
 
-For the TEs other than mPing and nDart, the largest-to-smallest ratio across strains ranges from 1.3 to 4.2.
+For the TEs other than mPing and nDart, the largest-to-smallest ratio across strains ranges from 1.3 to 5.1.
 For mPing the ratio is about 415 (485 against 1.2, leaving out strains with 0 copies).
-nDart: 5.0 in HEG4 against 0.1 to 2.1 elsewhere.
+nDart: 5.0 in HEG4 against 0.1 to 5.0 elsewhere.
 There are no published copy numbers for these TEs in the data used here, so the remaining spread cannot be assigned to biology or noise.
 `n` is the number of unique k-mers per TE.
 
@@ -78,7 +83,6 @@ There are no published copy numbers for these TEs in the data used here, so the 
 
 ## Not yet included
 
-- GC-corrected copy numbers.
-- k=31 results for the same strains.
-- Landraces A119, A123, A157 and CX140 (the paper's Nipponbare entry, streamed from ENA).
-- 100 additional lines from the 3,000-genome set.
+- GC-corrected copy numbers. The correction is in `scripts/mitekmer.py`, but it is not applied to the figures here.
+- Per-line comparison for the 100-line stratified set. See `docs/report/success/REPORT.md`.
+- A119, A123 and A157 have no per-line value in Chen et al. 2019, so they appear without a paper comparison.

@@ -228,7 +228,7 @@ def main():
 Copy numbers of rice transposable elements (TEs) estimated from k-mer depth in short reads, compared with
 published values. The algorithm is described in [`docs/ALGORITHM.md`](../ALGORITHM.md).
 
-**Scope.** k={a.k}; {len(strains)} strains{(" (" + ", ".join(no_base) + " has no baseline and no copy numbers)") if no_base else ""}; {len(cn)} TEs in `RiceTE.fa`; no GC correction applied.
+**Scope.** k={a.k}; {len(strains)} strains{(" (" + ", ".join(no_base) + " has no baseline and no copy numbers)") if no_base else ""}; {len(cn)} TEs in `RiceTE.fa`; no GC correction applied. NB_DRR028132 uses only the first 2.27 GB of R1 (single-end, about 7.6x), because its download was incomplete.
 
 ## Summary
 
@@ -286,10 +286,9 @@ There are no published copy numbers for these TEs in the data used here, so the 
 
 ## Not yet included
 
-- GC-corrected copy numbers.
-- k=31 results for the same strains.
-- Landraces A119, A123, A157 and CX140 (the paper's Nipponbare entry, streamed from ENA).
-- 100 additional lines from the 3,000-genome set.
+- GC-corrected copy numbers. The correction is in `scripts/mitekmer.py`, but it is not applied to the figures here.
+- Per-line comparison for the 100-line stratified set. See `docs/report/success/REPORT.md`.
+- A119, A123 and A157 have no per-line value in Chen et al. 2019, so they appear without a paper comparison.
 """
     (out / "REPORT.md").write_text(md)
     print("wrote", out / "REPORT.md")

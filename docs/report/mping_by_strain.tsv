@@ -1,5 +1,10 @@
 strain	group	single_copy_depth	paper_mPing	kmer_mPing_k21	ratio
 HEG4	burst	133		484.6	
+A119	burst	118		360.2	
+A123	burst	106		276.0	
+A157	landrace_unverified	17		142.7	
+NB_DRR028132	reference	5	52	60.0	1.15
+CX140	reference	9	52	56.6	1.09
 NB	reference	57	52	52.4	1.01
 B031	low_panel	8	12	12.4	1.03
 IRIS_313-10761	low_panel	6	8	11.3	1.42

@@ -377,7 +377,14 @@ def main():
         print(baseline_peak(*read_histo(args.histo)))
     elif args.cmd == "gcbias":
         b = baseline_peak(*read_histo(args.histo))
-        gc_bias_table(args.index, args.k, b).to_csv(args.out, sep="\t", index=False)
+        if np.isfinite(b):
+            table = gc_bias_table(args.index, args.k, b)
+        else:
+            # No baseline, so no single-copy k-mers to fit. Write a header-only table: the
+            # empty curve applies no correction, and the file still marks this index as done.
+            print("WARNING: no baseline; writing an empty GC-bias table", file=sys.stderr)
+            table = pd.DataFrame(columns=["gc", "n_kmers", "mean_depth", "bias"])
+        table.to_csv(args.out, sep="\t", index=False)
     elif args.cmd == "profile":
         profile(args)
     else:
