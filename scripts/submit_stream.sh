@@ -7,7 +7,7 @@
 set -euo pipefail
 list=$(realpath "$1") ks=${2:-21,31} maxc=${3:-4}
 here=$(cd "$(dirname "$0")/.." && pwd)
-part=${PARTITION:-batch} acct=${ACCOUNT:-stajichlab}
+part=${PARTITION:-stajichlab} acct=${ACCOUNT:-stajichlab}
 cpus=${CPUS:-8} mem=${MEM:-48G} time=${TIME:-08:00:00}
 outdir=${OUTDIR:-$here/work} keep=${KEEP_INDEX-1}
 n=$(( $(wc -l < "$list") - 1 ))

@@ -9,7 +9,7 @@
 set -euo pipefail
 k=$1 ref=${2:-NB}
 here=$(cd "$(dirname "$0")/.." && pwd)
-part=${PARTITION:-batch} acct=${ACCOUNT:-stajichlab}
+part=${PARTITION:-stajichlab} acct=${ACCOUNT:-stajichlab}
 threads=${THREADS:-16} mem=${MEM:-64G} time=${TIME:-24:00:00}
 hash=${HASH_SIZE:-2G} atime=${ANALYZE_TIME:-04:00:00}
 samples=${SAMPLES:-samples.tsv} out=${OUT_NAME:-full}

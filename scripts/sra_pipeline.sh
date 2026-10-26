@@ -12,7 +12,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 sra_root=${SRA_ROOT:-$here/sra_cache}
 fq_root=${FASTQ_ROOT:-$here/fastq_tmp}
 outdir=${OUTDIR:-$here/work}
-acct=${ACCOUNT:-stajichlab} part=${PARTITION:-batch}
+acct=${ACCOUNT:-stajichlab} part=${PARTITION:-stajichlab}
 cpus=${CPUS:-8} mem=${MEM:-32G} time=${TIME:-06:00:00} hash=${HASH_SIZE:-2G}
 lastk=${ks##*,}
 mkdir -p "$here/logs" "$sra_root" "$fq_root" "$outdir"
