@@ -194,3 +194,26 @@ def test_gcbias_cli_writes_empty_table_without_baseline(tmp_path):
     assert "no baseline" in res.stderr
     tab = pd.read_csv(out, sep="\t")
     assert list(tab.columns) == ["gc", "n_kmers", "mean_depth", "bias"] and len(tab) == 0
+
+
+def test_copy_number_table_recovers_copies_after_gc_correction():
+    rng = np.random.default_rng(0)
+    n = 400
+    gc_count_per_kmer = rng.integers(4, 18, n)
+    # build k-mers with the given G+C counts (k=21 string of G/C and A/T)
+    kmers = []
+    for g in gc_count_per_kmer:
+        bases = ["G"] * g + ["A"] * (21 - g)
+        rng.shuffle(bases)
+        kmers.append("".join(bases))
+    true_cn, b = 7.0, 10.0
+    # depth = copies * baseline * bias(gc); bias is 0.5 for GC<=10 and 1.5 above
+    bias = np.where(gc_count_per_kmer <= 10, 0.5, 1.5)
+    depths = pd.DataFrame({"te": "x", "kmer": kmers, "multiplicity": 1,
+                           "depth_s": true_cn * b * bias})
+    tab = pd.DataFrame({"gc": list(range(22)), "n_kmers": 5000,
+                        "mean_depth": 0.0, "bias": [0.5 if g <= 10 else 1.5 for g in range(22)]})
+    raw = mk.copy_number_table(depths, {"s": b})
+    corr = mk.copy_number_table(depths, {"s": b}, {"s": tab})
+    assert abs(raw.loc["x", "s"] - true_cn) > 1.5      # uncorrected is biased
+    assert corr.loc["x", "s"] == pytest.approx(true_cn)  # corrected recovers the copies

@@ -10,7 +10,7 @@ Test whether k-mer depth in short reads recovers transposable-element (TE) copy 
 
 - Path: `/bigdata/stajichlab/jstajich/projects/smite-kmer` (also `/rhome/jstajich/projects/smite-kmer`, the same repo).
 - Remote: `https://github.com/hyphaltip/smite-kmer.git`, branch `main`.
-- Last pushed commit: `fd305d6`. The working tree is clean, except for files listed under "Uncommitted" below.
+- Check `git log origin/main..HEAD` for unpushed commits.
 - Gitignored and not in git: `reads/`, `work/`, `results/`, `logs/`, `sra_cache/`, `fastq_tmp/`, and `*.jf`.
 
 ## Method (summary)
@@ -73,26 +73,33 @@ Rule for read sources: one source per accession. ENA is used for metadata only, 
 - `results/full/`: older 12-strain analysis.
 - `work/stream100_ready.tsv`, `work/analyze_k21.tsv`, `work/analyze_k31.tsv`: lists of which accessions have complete outputs.
 
-## Running now
+## State of the runs (2026-10-27)
 
-Array job **30818516**, account `stajichlab`, partition `stajichlab`. It runs `sra_node_array_task.sh` over `resources/Chen2019/rerun34_strains.tsv` (34 accessions), at most 4 at a time. Each task uses 8 CPUs, 64 GB and 4 hours. At the last check, one task had completed, four were running, and the rest were pending on the group CPU limit.
+No jobs are running. The SRA rerun array 30818516 finished: 32 tasks completed and 2 failed.
+- Task 17, accession B191: NCBI has no full-format `.sra` for run ERR624821, only an SRA Lite file, so the job stopped
+  before counting. No output exists for B191. The options are to use the Lite file (simplified quality scores), fetch
+  B191 from ENA, or drop it. This is not decided.
+- Task 34 failed because of a bug in the array wrapper (an off-by-one that skipped the first accession). It is fixed.
+  IRIS_313-10828 was run separately (job 30895210) and completed.
 
-Logs: `logs/nodetask.rerun34.30818516_<task>.out`.
+The unified report in `docs/report` (`REPORT.md`, `REPORT.pdf`, `figures/`, `tables/`) was rebuilt on 2026-10-27 from
+`results/unified/k21` and `k31`, with GC correction. Rebuild it with `sbatch scripts/rebuild_unified_report.sh`.
+The older files in `docs/report` (`success/`, `report_preview.png`, `mping_by_strain.tsv`, the earlier figures) are
+superseded. They are kept until you confirm they can be removed. Git history keeps the old versions.
 
-The 35th accession, **IRIS_313-8114**, is the test. It finished in job 30811372. Its output is in `work/`. It peaked at 31.6 GB of memory.
+## Blind burst discovery (new)
 
-Check progress with:
-
-    squeue -j 30818516
-    sacct -j 30818516 -X --format=JobID,State,Elapsed,MaxRSS
+See `docs/DISCOVERY.md`. `scripts/discover_bursts.py` finds high-copy sequences in one strain against a set of
+comparison strains. `scripts/cohort_matrix.py` builds a k-mer by strain copy-number matrix over all 80 indexed strains
+(`work/matrix/`) and calls bursts against the cohort median. mPing is recovered as one 430 bp unitig with 0 mismatches
+against the library. Not built: read recruitment and assembly, flank and insertion-site recovery, annotation.
 
 ## Next steps
 
-1. When array 30818516 finishes, check each task's log for `ok, <n> pairs` lines, a `mismatch` line, or an OOM kill.
-2. For each accession, confirm these exist in `work/`: `k21.histo`, `k21.depth.tsv`, `k31.histo`, `k31.depth.tsv`, and `gcbias/<strain>.k31.gcbias.tsv`.
-3. Rerun `scripts/mitekmer.py analyze` on the complete sample sheet for k=21 and k=31, into a new output directory. Use `--reference NB`. The bootstrap step makes this slow (it ran for more than 40 minutes per k on a login node earlier, and did not finish in the first attempt). Run it as a SLURM job, not on the login node. Runtime was not measured on the cluster.
-4. Regenerate `docs/report/success/` with `scripts/make_success_figure.py`, then the report with a new date. Commit the outputs.
-5. Regenerate `docs/report/REPORT.md` if needed, with `scripts/make_prelim_report.py --results <analysis dir> --k 21`.
+1. Decide B191.
+2. Confirm which old files in `docs/report` can be removed.
+3. Discovery: read recruitment and assembly of the mPing unitig; annotate the non-mPing unitigs (rDNA-like,
+   polylinker-like and the temperate japonica repeat are unconfirmed); a spike-in test of detection limits.
 
 ## Open decisions and known issues
 
@@ -111,10 +118,6 @@ Check progress with:
 - SRA tools: `module load sratoolkit/3.2.0 parallel-fastq-dump/0.6.7` (`sra_node_task.sh` does this).
 - `sbatch --wrap` runs under `sh`. Put Bash-only logic in a script file.
 - The `sbatch` default account and partition in the scripts is now `stajichlab`. Override with `ACCOUNT` or `PARTITION`.
-
-## Uncommitted
-
-- `docs/HANDOFF.md` (this file), until it is committed.
 
 ## Contacts
 

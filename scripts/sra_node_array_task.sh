@@ -4,7 +4,7 @@
 set -euo pipefail
 runs=$1 strains=$2 outdir=$3 ks=$4
 root=${PROJ_ROOT:?set PROJ_ROOT}
-strain=$(sed -n "$((SLURM_ARRAY_TASK_ID + 1))p" "$strains" | cut -f1)
+strain=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$strains" | cut -f1)  # no header line in the strains file
 [[ -n $strain ]] || { echo "no accession for task $SLURM_ARRAY_TASK_ID" >&2; exit 1; }
 echo "task $SLURM_ARRAY_TASK_ID: $strain"
 "$root/scripts/sra_node_task.sh" "$runs" "$strain" "$outdir" "$ks" "${SLURM_CPUS_PER_TASK:-8}" 2G

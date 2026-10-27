@@ -7,6 +7,7 @@ Subcommands:
   baseline  single-copy depth (modal peak) from a jellyfish histogram
   analyze   normalise, compare to a reference strain, flag, plot
   gcbias    depth-vs-GC curve of one index, from single-copy-like k-mers
+  cn        median copy number per TE and strain, optionally GC-corrected (no bootstrap)
   profile   windowed copy number along each TE from an analyze output, with a breadth summary
 """
 import argparse
@@ -177,6 +178,26 @@ def correct_gc(depths, bias_by_strain, min_kmers=1000):
     return out
 
 
+def copy_number_table(depths, base, gc_tables=None, min_kmers=1000):
+    """Median copy number per TE and strain, over the TE k-mers that are unique in the TE file.
+
+    depths: te_kmer_depths table (columns te, kmer, multiplicity, depth_<strain>)
+    base: single-copy depth per strain (NaN strains are left out)
+    gc_tables: optional {strain: gc-bias table}; depths are corrected before the median
+    Returns a DataFrame indexed by TE, one column per strain.
+    """
+    uniq = depths[depths["multiplicity"] == 1].copy()
+    if gc_tables:
+        uniq = correct_gc(uniq, gc_tables, min_kmers)
+    out = {}
+    for strain, b in base.items():
+        col = f"depth_{strain}"
+        if col not in uniq or not np.isfinite(b):
+            continue
+        out[strain] = (uniq[col] / b).groupby(uniq["te"]).median()
+    return pd.DataFrame(out)
+
+
 def window_profile(depths, base, window, min_frac=0.5):
     """Windowed copy number along each TE from a te_kmer_depths table.
 
@@ -259,6 +280,9 @@ def analyze(args):
     out.mkdir(parents=True, exist_ok=True)
     pd.Series(base, name="single_copy_depth").to_csv(out / f"baseline.k{args.k}.tsv", sep="\t")
     kt.to_csv(out / f"te_kmer_depths.k{args.k}.tsv", sep="\t", index=False)
+    if args.skip_stats:
+        print(f"wrote baselines and depths for {len(strains)} strains (statistics skipped)", file=sys.stderr)
+        return
 
     rows = []
     for te, g in uniq.groupby("te", sort=False):
@@ -322,6 +346,29 @@ def plot_tracks(uniq, strains, k, path):
     fig.savefig(path, dpi=130)
 
 
+def load_gc_tables(gc_dir, k, strains):
+    """GC-bias tables that exist and have a curve. Missing or empty tables are left out."""
+    tabs = {}
+    for s in strains:
+        f = Path(gc_dir) / f"{s}.k{k}.gcbias.tsv"
+        if f.exists() and f.stat().st_size > 0:
+            t = pd.read_csv(f, sep="\t")
+            if len(t):
+                tabs[s] = t
+    return tabs
+
+
+def cn_command(args):
+    res = Path(args.results)
+    depths = pd.read_csv(res / f"te_kmer_depths.k{args.k}.tsv", sep="\t")
+    base = pd.read_csv(res / f"baseline.k{args.k}.tsv", sep="\t", index_col=0)["single_copy_depth"]
+    gc = load_gc_tables(args.gc_bias_dir, args.k, base.index) if args.gc_bias_dir else None
+    table = copy_number_table(depths, base.to_dict(), gc)
+    table.round(3).to_csv(args.out, sep="\t")
+    print(f"k={args.k}: {table.shape[0]} TEs x {table.shape[1]} strains; "
+          f"GC-corrected strains: {0 if gc is None else len(gc)}", file=sys.stderr)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -347,6 +394,12 @@ def main():
     a.add_argument("--histo", required=True, help="histogram used to get the single-copy depth")
     a.add_argument("--out", required=True)
 
+    a = sp.add_parser("cn")
+    a.add_argument("--results", required=True, help="analyze output directory")
+    a.add_argument("--k", type=int, required=True)
+    a.add_argument("--gc-bias-dir", help="directory of <strain>.k<k>.gcbias.tsv; applies GC correction")
+    a.add_argument("--out", required=True)
+
     a = sp.add_parser("analyze")
     a.add_argument("--fasta", required=True)
     a.add_argument("--samples", required=True)
@@ -354,6 +407,8 @@ def main():
     a.add_argument("--k", type=int, required=True)
     a.add_argument("--reference", default="NB")
     a.add_argument("--threshold", type=float, default=2.0)
+    a.add_argument("--skip-stats", action="store_true",
+                   help="write baselines and the per-k-mer depth table only; skip tests, bootstrap and plots")
     a.add_argument("--out", required=True)
 
     a = sp.add_parser("profile")
@@ -385,6 +440,8 @@ def main():
             print("WARNING: no baseline; writing an empty GC-bias table", file=sys.stderr)
             table = pd.DataFrame(columns=["gc", "n_kmers", "mean_depth", "bias"])
         table.to_csv(args.out, sep="\t", index=False)
+    elif args.cmd == "cn":
+        cn_command(args)
     elif args.cmd == "profile":
         profile(args)
     else:
